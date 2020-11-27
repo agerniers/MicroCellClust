@@ -102,7 +102,7 @@ getGenes = function(mcc.rs, data, cells.idx, cellsOnCol = TRUE, kappa = 1.0, nNe
   }
   
   res = mcc.rs(m = data.matrix, c = cells.idx, k = kappa, n = nNeg) *
-    'Objective.getCols(m, c.map(_ - 1).toList, Objective.buildExprMap(m), Objective.getColSum(m), kappa = k, nNeg = n)'
+    'Objective.getMarkers(m, c.map(_.toInt - 1).toList, Objective.buildExprMap(m), Objective.getMarkSum(m), kappa = k, nNeg = n)'
   
   clust.genes = mcc.rs(res = res) * 'res._1.map(_ + 1).toArray'
   clust.obj = mcc.rs(res = res) * 'res._2'
