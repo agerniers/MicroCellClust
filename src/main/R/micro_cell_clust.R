@@ -36,10 +36,10 @@ estimateHeuristic = function(mcc.rs, data, cellsOnCol = TRUE, kappa = 1.0) {
   if (cellsOnCol) {
     data.matrix = t(data.matrix)
   }
-  
+
   res = mcc.rs(m = data.matrix, k = kappa) * 'Solver.evaluatePairs(m, k)'
-  
-  pairs.id = mcc.rs(res = res) * 'res.map(_._1.mkString("-")).toArray'
+
+  pairs.id = mcc.rs(res = res) * 'res.map(x => x._1.map(_ + 1).mkString("-")).toArray'
   pairs.obj = mcc.rs(res = res) * 'res.map(_._2).toArray'
   names(pairs.obj) = pairs.id
   pairs.obj
@@ -54,25 +54,67 @@ estimateHeuristic = function(mcc.rs, data, cellsOnCol = TRUE, kappa = 1.0) {
 #' @param kappa The out-of-cluster expression penalty constant (default: 1)
 #' @param nNeg The maximum percentage of -1 allowed inside the cluster (default: 0.1)
 #' @param maxNbCells The maximum number of cells allowed to form a solution (past this number, the seach is stopped; default: Inf)
+#' @param stopNoImprove stop search when no better solution is found after x levels
 #' @param minCoExpGenes Requires a solution to contain at least a certain number of genes expressed in every cell of the bicluster (default: 0)
-#' @param nbHeurInit Parameter for the heuristic: the initial number of top-solutions to consider for expansion at the next level
-#' @param nbHeurAdd Parameter for the heuristic: the number of extra top-solutions to consider at each level
-#' 
+#' @param nHeuristic Parameter for the heuristic: the initial number of top-solutions to consider for expansion at the next level
+#' @param verbose Enable/disable printing
+#'
 #' @return The cells and genes forming the bicluster, and its objective value
-#' 
-runMCC = function(mcc.rs, data, cellsOnCol = TRUE, kappa = 1.0, nNeg = 0.1, maxNbCells = Inf, minCoExpGenes = 0, nbHeurInit = 20, nbHeurAdd = 10) {
+#'
+runMCC = function(mcc.rs, data, cellsOnCol = TRUE, kappa = 1.0, nNeg = 0.1, maxNbCells = Inf, stopNoImprove = 25, minCoExpGenes = 0, nHeuristic = 20, verbose = T) {
   data.matrix = as.matrix(data)
   if (cellsOnCol) {  # Scala implementation considers cells on rows and genes on columns
     data.matrix = t(data.matrix)
   }
-  
-  res = mcc.rs(m = data.matrix, k = kappa, n = nNeg, mc = maxNbCells, mg = minCoExpGenes, nh = nbHeurInit, dh = nbHeurAdd) *
-    'Solver.findCluster(m, kappa = k, nNeg = n, maxNbSam = mc.toInt, minCoExpMark = mg.toInt, nHeuristic = nh.toInt, deltaHeuristic = dh.toInt)'
-  
+
+  res = mcc.rs(m = data.matrix, k = kappa, n = nNeg, mc = maxNbCells, sni = stopNoImprove, mg = minCoExpGenes, nh = nHeuristic, v = verbose) *
+  'Solver.findCluster(m, kappa = k, nNeg = n, maxNbSam = mc.toInt, stopNoImprove = sni.toInt, minCoExpMark = mg.toInt, nHeuristic = nh.toInt, verbose = v)'
+
   clust.cells = mcc.rs(res = res) * 'res._1.map(_ + 1).toArray'
   clust.genes = mcc.rs(res = res) * 'res._2.map(_ + 1).toArray'
   clust.obj = mcc.rs(res = res) * 'res._3'
-  
+
+  if (cellsOnCol) {
+    res.lst = list(clust.cells, colnames(data)[clust.cells], clust.genes, rownames(data)[clust.genes], clust.obj)
+    names(res.lst) = c("cells.idx", "cells.names", "genes.idx", "genes.names", "obj.value")
+    res.lst
+  } else {
+    res.lst = list(clust.cells, rownames(data)[clust.cells], clust.genes, colnames(data)[clust.genes], clust.obj)
+    names(res.lst) = c("cells.idx", "cells.names", "genes.idx", "genes.names", "obj.value")
+    res.lst
+  }
+}
+
+#' Runs MicroCellClust on the given data to find the bicluster maximising the objective using heuristic search with
+#' all cells except those in excl as variables
+#'
+#' @param mcc.rs A MicroCluster RScala instance
+#' @param data An expression matrix
+#' @param excl A list of cell indexes that need to be excluded from the search
+#' @param cellsOnCol Wether the cells are described by the columns (\code{TRUE}, default) or the rows (\code{FALSE})
+#' @param kappa The out-of-cluster expression penalty constant (default: 1)
+#' @param nNeg The maximum percentage of -1 allowed inside the cluster (default: 0.1)
+#' @param maxNbCells The maximum number of cells allowed to form a solution (past this number, the seach is stopped; default: Inf)
+#' @param stopNoImprove stop search when no better solution is found after x levels
+#' @param minCoExpGenes Requires a solution to contain at least a certain number of genes expressed in every cell of the bicluster (default: 0)
+#' @param nHeuristic Parameter for the heuristic: the initial number of top-solutions to consider for expansion at the next level
+#' @param verbose Enable/disable printing
+#'
+#' @return The cells and genes forming the bicluster, and its objective value
+#'
+runMCC.exclude = function(mcc.rs, data, excl, cellsOnCol = TRUE, kappa = 1.0, nNeg = 0.1, maxNbCells = Inf, stopNoImprove = 25, minCoExpGenes = 0, nHeuristic = 20, verbose = T) {
+  data.matrix = as.matrix(data)
+  if (cellsOnCol) {  # Scala implementation considers cells on rows and genes on columns
+    data.matrix = t(data.matrix)
+  }
+
+  res = mcc.rs(m = data.matrix, excl, k = kappa, n = nNeg, mc = maxNbCells, sni = stopNoImprove, mg = minCoExpGenes, nh = nHeuristic, v = verbose) *
+  'Solver.findCluster(m, kappa = k, nNeg = n, maxNbSam = mc.toInt, stopNoImprove = sni.toInt, minCoExpMark = mg.toInt, nHeuristic = nh.toInt, excl = excl.map(_.toInt - 1).toList, verbose = v)'
+
+  clust.cells = mcc.rs(res = res) * 'res._1.map(_ + 1).toArray'
+  clust.genes = mcc.rs(res = res) * 'res._2.map(_ + 1).toArray'
+  clust.obj = mcc.rs(res = res) * 'res._3'
+
   if (cellsOnCol) {
     res.lst = list(clust.cells, colnames(data)[clust.cells], clust.genes, rownames(data)[clust.genes], clust.obj)
     names(res.lst) = c("cells.idx", "cells.names", "genes.idx", "genes.names", "obj.value")
@@ -100,13 +142,13 @@ getGenes = function(mcc.rs, data, cells.idx, cellsOnCol = TRUE, kappa = 1.0, nNe
   if (cellsOnCol) {
     data.matrix = t(data.matrix)
   }
-  
+
   res = mcc.rs(m = data.matrix, c = cells.idx, k = kappa, n = nNeg) *
-    'Objective.getMarkers(m, c.map(_.toInt - 1).toList, Objective.buildExprMap(m), Objective.getMarkSum(m), kappa = k, nNeg = n)'
-  
+  'Objective.getMarkers(m, c.map(_.toInt - 1).toList, Objective.buildExprMap(m), Objective.getMarkSum(m), kappa = k, nNeg = n)'
+
   clust.genes = mcc.rs(res = res) * 'res._1.map(_ + 1).toArray'
   clust.obj = mcc.rs(res = res) * 'res._2'
-  
+
   if (cellsOnCol) {
     res.lst = list(clust.genes, rownames(data)[clust.genes], clust.obj)
     names(res.lst) = c("genes.idx", "genes.names", "obj.value")

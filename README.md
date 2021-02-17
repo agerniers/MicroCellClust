@@ -1,6 +1,6 @@
 # MicroCellClust
 
-This repository contains an implementation of the MicroCellClust optimisation problem presented in [...]. It was designed to search for small cell-clusters (typically less than 10% of the number of cells) that present a highly specific gene expression in scRNA-seq data. It has been implemented in the Scala programming language. This repository also contains an interface to run MicroCellClust in R.
+This repository contains an implementation of the MicroCellClust optimisation problem presented in [...]. It is designed to search for small cell-clusters (typically less than 10% of the number of cells) that present a highly specific gene expression in scRNA-seq data. It has been implemented in the Scala programming language. This repository also contains an interface to run MicroCellClust in R.
 
 
 
@@ -31,11 +31,11 @@ This `mcc.rs` object needs to be passed as the first argument to any R function 
 
 ### Preprocessing the data matrix
 
-Let's assume the expression data is contained in a dataframe called `exprData`. As discussed in the paper, the first step is to get rid of genes that are expressed in too many cells of the dataset. The function `preprocessGenes` filters out genes that are expressed in more than a certain proportion `thresh` of the cells.
+Let's assume the expression data is contained in a dataframe called `exprData`. As discussed in the paper, the first step is removing genes that are expressed in too many cells of the dataset. The function `preprocessGenes` filters out genes that are expressed in more than a certain proportion `thresh` of the cells.
 ``` R
 exprData.filt = preprocessGenes(exprData, thresh = 0.25)
 ```
-**Remark:** By default, the R implementation represents the cells by the columns, and the genes by the rows. In the inverse case, the user can indicate this by giving the parameter `cellsOnCol = FALSE` to the function. *Note that in the Scala implementation, the samples (here cells) are represented by the rows, which is traditionally the case in machine learning.*
+**Remark:** By default, the R implementation represents the cells by the columns, and the genes by the rows. In the opposite case, the user can indicate this by giving the parameter `cellsOnCol = FALSE` to the function. *Note that in the Scala implementation, the samples (here cells) are represented by the rows, which is usually the case in machine learning.*
 
 
 ### Running MicroCellClust
@@ -44,33 +44,47 @@ MicroCellClust is run using the following function:
 ``` R
 mcc.res = runMCC(mcc.rs, exprData.filt, kappa = 1, nNeg = 0.1)
 ```
-As this function calls the Scala solver, the user must provide the `mcc.rs` object as first argument. Arguments `kappa` and `nNeg` correspond to the $\kappa$ and $\mu$ methaparameters of the optimisation problem, controlling respectively the out-of-cluster expression and the maximum proportion of negative values inside the bicluster. `mcc.res` returns a list containing the indices and names of the cells (`mcc.res$cells.idx` and `mcc.res$cells.names`) and genes (`mcc.res$genes.idx` and `mcc.res$genes.names`) composing the identified bicluster, as well as the latter's objective value (`mcc.res$obj.value`).
+As this function calls the Scala solver, the user must provide the `mcc.rs` object as first argument. Arguments `kappa` and `nNeg` correspond to the $\kappa$ and $\mu$ methaparameters of the optimisation problem, controlling respectively the out-of-cluster expression and the maximum proportion of negative values inside the bicluster. Good initial values are $\kappa = \frac{100}{nb. cells}$ and $\mu = 0.1$.
 
-#### Additional parameters
-Additional parameters can be used. A maximum number of cells that the bicluster may contain can be enforced using the `maxNbCells` argument. Once the search reaches clusters of this size, it will stop. Since the goal of MicroCellClust is to find relatively small clusters, this parameter is useful to avoid exploring parts of the search space that are anyway uninteristing.
+`mcc.res` returns a list containing the indices and names of the cells (`mcc.res$cells.idx` and `mcc.res$cells.names`) and genes (`mcc.res$genes.idx` and `mcc.res$genes.names`) composing the identified bicluster, as well as the latter's objective value (`mcc.res$obj.value`).
+
+By default, the solver stops the search when no improvement to the current best solution is found during 25 successive search levels. This can be changed using the `stopNoImprove` parameter:
 ``` R
-mcc.res = runMCC(mcc.rs, exprData.filt, kappa = 1, nNeg = 0.1, maxNbCells = 50)
+mcc.res = runMCC(mcc.rs, exprData.filt, kappa = 1, nNeg = 0.1, stopNoImprove = 25)
 ```
-An other possibly useful parameter is `minCoExpGenes`. It sets a minimum number of genes that must be expressed in every cell of the bicluster to form a solution. Since we search for highly specific clusters, it can make sense to impose that a bicluster contains at least a few genes without any negative expression. This constraint has the advantage that it will eliminate a lot of biclusters during the search, which can give a significant speedup.
-``` R
-mcc.res = runMCC(mcc.rs, exprData.filt, kappa = 1, nNeg = 0.1, minCoExpGenes = 2)
-```
+Printing information during the execution of `runMCC` can be disabled by setting the argument `verbose = FALSE`.
 
-### Parameters for the Heuristic
-The optimisation problem described in the paper is a NP-hard problem. To solve it efficiently, we use a heuristic that drives the search to the most promissing zones of the search space. The solver follows a breadth-first search strategy, meaning it first evaluates all possible biclusters composed of 2 cells (level 2), then biclusters composed of 3 cells (level 3), etc. At each level, the heuristic will select only a fraction of the biclusters, the ones with the highest objective values, to continue the search. Initially, a number `nbHeurInit` of solutions are selected, and at each subsequent level, this number is increased by `nbHeurAdd`:
 
-* At level 2, all the pairs of cells are evaluated. Then, the `nbHeurInit` pairs with the highest objective value are selected.
-* At level 3, biclusters are created by adding 1 cell to the biclusters that where selected at the previous level. These biclusters are evaluated and the `nbHeurInit` + `nbHeurAdd` best ones are selected.
-* At level 4, we again add 1 cell to the previously selected biclusters, and select the `nbHeurInit`+ 2 * `nbHeurAdd` best ones among them.
-* Etc.
+#### Parameter for the Heuristic
+The optimisation problem described in the paper is a NP-hard problem. To solve it efficiently, we use a heuristic that drives the search to the most promissing zones of the search space. The solver follows a breadth-first search strategy, meaning it first evaluates all possible biclusters composed of 2 cells (level 2), then biclusters composed of 3 cells (level 3), etc. At each level, the heuristic will select only a fraction of the biclusters, the ones with the highest objective values, to continue the search. 
 
-The values `nbHeurInit` and `nbHeurAdd` will influence the duration of the search. The smaller they are, the faster the search will end as fewer possible solutions are evaluated. Of course, these values must not be too small, otherwise we might miss the optimal solution. A tradeoff should be found between searching in a sufficiently large part of the search space, and ensuring the search doesn't take too much time.
-
-In order to have an estimation of `nbHeurInit`, the user can plot the objective values of all the pairs of cells, ordered decreasingly, and look at the evolution of this curve. This curve generally roughly follows a power law. A good estimation is to take the index where the slope becomes small as value for `nbHeurInit`.
+The number of solutions kept is defined by the `nHeuristic` parameter. Its value will influence the duration of the search after the evaluation of all pairs. However, it should be sufficiently big so as to avoid missing the optimum. In order to have an estimation of `nHeuristic`, the user can plot the objective values of all the pairs of cells, ordered decreasingly, and look at the evolution of this curve, which roughly follows a power law. A good estimation is to take the rank where the slope becomes small as value for `nHeuristic`.
 ``` R
 pairs.obj = estimateHeuristic(mcc.rs, exprData.filt, kappa = 1)
 plot(1:100, pairs.obj[1:100]) 
-# For nbHeurInit, choose a value roughly corresponding to the place where the slope gets small
-# For nbHeurAdd, choose for example nbInit/2
-mcc.res = runMCC(mcc.rs, exprData.filt, kappa = 1, nNeg = 0.1, nbHeurInit = 20, nbHeurAdd = 10)
+# Choose a value roughly corresponding to the place where the slope gets small
+mcc.res = runMCC(mcc.rs, exprData.filt, kappa = 1, nNeg = 0.1, nHeuristic = 20)
+```
+
+#### Top-$k$ search
+
+Once a bicluster has been found, MicroCellClust may be re-run to search for another possible solution among the remaining cells:
+``` R
+previous.cells = mcc.res$cells.idx
+mcc.res.2 = runMCC.exclude(mcc.rs, exprData.filt, excl = previous.cells, kappa = 1, nNeg = 0.1)
+```
+
+## Using MicroCellClust in Scala
+
+MicroCellClust can be executed directly in Scala. **Note that for the Scala implementation, the data must be represented with cells (samples) as rows genes as columns.** Assuming `exprData` is a 2D-array of doubles, and `cellNames` and `geneNames` are arrays of strings:
+``` Scala
+import Preprocessor.expressionFilter
+import Solver.findCluster
+
+val exprDataFilt, geneNamesFilt = expressionFilter(exprData, geneNames, thresh = 0.25)
+
+val resCellsID, resGenesID, resObj = findCluster(exprDataFilt, kappa = 1, nNeg = 0.1)
+
+val resCellsNames = resCellsID.map(cellNames(_))
+val resGenesNames = resGenesID.map(geneNamesFilt(_))
 ```

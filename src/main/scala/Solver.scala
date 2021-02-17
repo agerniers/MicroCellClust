@@ -1,6 +1,6 @@
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ListBuffer, PriorityQueue}
 
-import Objective.{getMarkers, buildExprMap, getMarkSum, getCoExprMarks}
+import Objective.{buildExprMap, getCoExprMarks, getExpSums, getMarkSum, getMarkers, getMarkersFromPrev}
 
 /*
  * Author: Alexander Gerniers
@@ -13,80 +13,108 @@ object Solver {
       * @param nNeg the maximum percentage of -1 allowed inside the cluster
       * @param kappa a weighting constant for the out-of-cluster expression
       * @param nHeuristic the initial number of top-solutions to consider for expansion at the next level
-      * @param deltaHeuristic the number of extra top-solutions to consider at each level
       * @param maxNbSam the maximum number of samples in the bicluster
+      * @param stopNoImprove stop search when no better solution is found after x levels
       * @param minCoExpMark a minimum number of markers that must be expressed in every row of the bicluster
-      * @param excl a list of markers that need to be excluded from the search
+      * @param excl a list of samples that need to be excluded from the search
+      * @param verbose enable/disable printing
       * @return - an assignment of samples
       *         - an assignment of markers
       *         - the corresponding objective value
       */
-    def findCluster(m: Array[Array[Double]], nNeg: Double = 0.1, kappa: Double = 1, nHeuristic: Int = 20, deltaHeuristic: Int = 10,
-                    maxNbSam: Int = Int.MaxValue, minCoExpMark: Int = 0, excl: List[Int] = List()): (List[Int], List[Int], Double) = {
+    def findCluster(m: Array[Array[Double]], nNeg: Double = 0.1, kappa: Double = 1, nHeuristic: Int = 20,
+                    maxNbSam: Int = Int.MaxValue, stopNoImprove: Int = 25, minCoExpMark: Int = 0,
+                    excl: List[Int] = List(), verbose: Boolean = true): (List[Int], List[Int], Double) = {
         val expr = buildExprMap(m)
         val markSum = getMarkSum(m)
         val nSam = m.length
+        val nSamMinusExcl = nSam - excl.length
 
-        val lb = ListBuffer[(List[Int], List[Int], Double)]()
-        val pairs = (0 until nSam).combinations(2).toList
-
-        println("Current search level: 2")
-        println("\t " + pairs.length + " pairs to evaluate")
+        if (verbose) {
+            println("Current search level: 2")
+            println("\t " + ((nSamMinusExcl * nSamMinusExcl - nSamMinusExcl) / 2) + " pairs to evaluate")
+        }
+        val t0 = System.currentTimeMillis
 
         // Evaluation of all the pairs of cells
-        for (p <- pairs) {
+        val nBestQueue = PriorityQueue[(List[Int], List[Int], Double)]()(Ordering[Double].on(x => -x._3))
+        for (p <- (0 until nSam).combinations(2)) {
             if (excl.length == 0 || !excl.exists(p contains _)) {
                 val (markers, obj) = getMarkers(m, p.toList, expr, markSum, nNeg, kappa)
-                lb += ((p.toList, markers, obj))
+                nBestQueue += ((p.toList, markers, obj))
+                if (nBestQueue.size > nHeuristic) nBestQueue.dequeue
             }
         }
 
-        val l = lb.sortBy(-_._3).toList.take(nHeuristic)
-        var best = l(0)
-        var prevBest = l.map(x =>  (x._1, getCoExprMarks(x._1, expr)))
+        val nBest = nBestQueue.dequeueAll.toList.reverse
+        var best = nBest(0)
+        var prevLvlNBest = nBest.map(x =>  (x._1, getCoExprMarks(x._1, expr)))
+        val t1 = System.currentTimeMillis
 
-        println("\t NEW BEST: obj. val.: " + best._3 + "\t samples (idx. from 1): " + best._1.map(_ + 1).mkString(", ") + "\t nb. markers: " + best._2.length)
+        if (verbose) {
+            println("\t NEW BEST: obj. val.: " + best._3)
+            println("\t samples (idx. from 1): " + best._1.map(_ + 1).mkString(", "))
+            println("\t nb. markers: " + best._2.length)
+            println("\t Computation time [s]: " + ((t1 - t0).toDouble / 1000))
+        }
 
         var lvl = 3
+        val maxLvl = maxNbSam min nSam
+        var noImprove = 0
         var finished = false
-        while (!finished && lvl <= maxNbSam) {
-            // Extend solutions in prevBest by adding one cell
-            var candidates = prevBest.flatMap(x => (0 until nSam).map(y => ((y :: x._1).distinct, (x._2.toSet intersect expr(y).toSet).toList)))
+        while (!finished && lvl <= maxLvl) {
+            if (verbose) {
+                println("Current search level: " + lvl)
+            }
+            val t0 = System.currentTimeMillis
+            val nBestQueue = PriorityQueue[(List[Int], List[Int], Double, List[Int])]()(Ordering[Double].on(x => -x._3))
 
-            // Filter out solutions containing excluded cells
-            if (excl.length > 0) candidates = candidates.filterNot(x => excl.exists(x._1 contains _))
-
-            // Filter out solutions with smaller number of samples and without enough markers expressed in all samples
-            candidates = candidates.filterNot(_._1.size < lvl)
-                                   .map(x => (x._1.sorted, x._2)).distinct
-                                   .filter(x => x._2.length >= minCoExpMark)
-
-            println("Current search level: " + lvl)
-            println("\t " + candidates.length + " solutions to evaluate")
-
-            if (!candidates.isEmpty) {
-                var res = ListBuffer[(List[Int], List[Int], Double, List[Int])]()
-
-                // Evaluation of the solutions
-                for ((samples, coExp) <- candidates) {
-                    val (markers, obj) = getMarkers(m, samples, expr, markSum, nNeg, kappa)
-                    res += ((samples, markers, obj, coExp))
+            for (p <- prevLvlNBest.indices) {
+                val prevExpSums = getExpSums(m, prevLvlNBest(p)._1, nNeg)
+                var toExclude = excl ++ prevLvlNBest(p)._1
+                for (pp <- 0 until p) {
+                    val setDif = prevLvlNBest(pp)._1.filterNot(prevLvlNBest(p)._1.toSet)
+                    if (setDif.length == 1) toExclude ++= setDif
                 }
-
-                if (res.length > 0) {
-                    res = res.sortBy(-_._3)
-                    prevBest = res.toList.take(nHeuristic + (lvl - 2) * deltaHeuristic).map(x => (x._1, x._4))
-                    if (res(0)._3 > best._3) {
-                        best = (res(0)._1, res(0)._2, res(0)._3)
-
-                        println("\t NEW BEST: obj. val.: " + best._3 + "\t samples (idx. from 1): " + best._1.map(_ + 1).mkString(", ") + "\t nb. markers: " + best._2.length)
+                for (i <- 0 until nSam if !toExclude.contains(i)) {
+                    val samples = (i :: prevLvlNBest(p)._1).sorted
+                    val coExp = (prevLvlNBest(p)._2.toSet intersect expr(i).toSet).toList
+                    if (coExp.length >= minCoExpMark) {
+                        val (markers, obj) = getMarkersFromPrev(m, samples, i, markSum, prevExpSums, nNeg, kappa)
+                        nBestQueue += ((samples, markers, obj, coExp))
+                        if (nBestQueue.size > nHeuristic) nBestQueue.dequeue
                     }
-                    lvl += 1
-                } else {
-                    finished = true
                 }
+            }
+
+            if (nBestQueue.size > 0) {
+                val nBest = nBestQueue.dequeueAll.toList.reverse
+                prevLvlNBest = nBest.map(x => (x._1, x._4))
+                if (nBest(0)._3 > best._3) {
+                    best = (nBest(0)._1, nBest(0)._2, nBest(0)._3)
+                    noImprove = 0
+                    if (verbose) {
+                        println("\t NEW BEST: obj. val.: " + best._3)
+                        println("\t samples (idx. from 1): " + best._1.map(_ + 1).mkString(", "))
+                        println("\t nb. markers: " + best._2.length)
+                    }
+                } else {
+                    noImprove += 1
+                    if (noImprove >= stopNoImprove) {
+                        finished = true
+                        if (verbose) {
+                            println("\t No improvement after " + stopNoImprove + " levels: search stopped")
+                        }
+                    }
+                }
+                lvl += 1
             } else {
                 finished = true
+            }
+
+            val t1 = System.currentTimeMillis
+            if (verbose) {
+                println("\t Computation time [s]: " + ((t1 - t0).toDouble / 1000))
             }
         }
 
