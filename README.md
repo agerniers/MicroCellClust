@@ -1,6 +1,8 @@
 # MicroCellClust
 
-This repository contains an implementation of the MicroCellClust optimisation problem presented in [...]. It is designed to search for small cell-clusters (typically less than 10% of the number of cells) that present a highly specific gene expression in scRNA-seq data. It has been implemented in the Scala programming language. This repository also contains an interface to run MicroCellClust in R.
+This repository contains an implementation of the MicroCellClust optimisation problem presented in [...]. It is designed to search for rare cell-clusters (typically less than 10% of the number of cells) that present a highly specific gene expression in scRNA-seq data. It has been implemented in the Scala programming language. This repository also contains an interface to run MicroCellClust in R.
+
+Version 1.2 is also available on Zenodo http://doi.org/10.5281/zenodo.4580332
 
 
 
@@ -31,7 +33,9 @@ This `mcc.rs` object needs to be passed as the first argument to any R function 
 
 ### Preprocessing the data matrix
 
-Let's assume the expression data is contained in a dataframe called `exprData`. As discussed in the paper, the first step is removing genes that are expressed in too many cells of the dataset. The function `preprocessGenes` filters out genes that are expressed in more than a certain proportion `thresh` of the cells (typically 25%).
+Let's assume the expression data is contained in a dataframe called `exprData`. This data is assumed to contain positive values when a gene is expressed in a cell, and negative values if it is not expressed (a possible scaling of the (normalized) count expression data to obtain this is $\log_{10}(x + 0.1)$).
+
+As discussed in the paper, the first step is removing genes that are expressed in too many cells of the dataset. The function `preprocessGenes` filters out genes that are expressed in more than a certain proportion `thresh` of the cells (typically 25%).
 ``` R
 exprData.filt = preprocessGenes(exprData, thresh = 0.25)
 ```
@@ -48,23 +52,24 @@ As this function calls the Scala solver, the user must provide the `mcc.rs` obje
 
 `mcc.res` returns a list containing the indices and names of the cells (`mcc.res$cells.idx` and `mcc.res$cells.names`) and genes (`mcc.res$genes.idx` and `mcc.res$genes.names`) composing the identified bicluster, as well as its objective value (`mcc.res$obj.value`).
 
-By default, the solver stops the search when no improvement to the current best solution is found during 25 successive search levels. This can be changed using the `stopNoImprove` parameter:
-``` R
-mcc.res = runMCC(mcc.rs, exprData.filt, kappa = 1, nNeg = 0.1, stopNoImprove = 25)
-```
-Printing information during the execution of `runMCC` can be disabled by setting the argument `verbose = FALSE`.
 
+#### Parameter for the heuristic solver
+The optimisation problem described in the paper is a NP-hard problem. To solve it efficiently, we use a heuristic solver that drives the search to the most promising zones of the search space. The solver follows a breadth-first search strategy, meaning it first evaluates all possible biclusters composed of 2 cells (level 2), then biclusters composed of 3 cells (level 3), etc. At each level, the heuristic will select only a fraction of the biclusters, the ones with above average objective values, to continue the search. Since the distribution of objective values roughly follow a power law, this corresponds to ignoring the long tail of the distribution (see supplementary data of the paper).
 
-#### Parameter for the Heuristic
-The optimisation problem described in the paper is a NP-hard problem. To solve it efficiently, we use a heuristic that drives the search to the most promissing zones of the search space. The solver follows a breadth-first search strategy, meaning it first evaluates all possible biclusters composed of 2 cells (level 2), then biclusters composed of 3 cells (level 3), etc. At each level, the heuristic will select only a fraction of the biclusters, the ones with the highest objective values, to continue the search. 
-
-The number of solutions kept is defined by the `nHeuristic` parameter. In order to infer `nHeuristic` from the data, the user can plot the objective values of all the pairs of cells, ordered decreasingly, and look at the evolution of this curve, which roughly follows a power law. A good estimation is to take the rank where the slope becomes small as value for `nHeuristic` (see supplementary material of the publication).
+To do so, the `nHeuristic` parameter must be set to the rank in the distribution roughly corresponding to the beginning of the long tail:
 ``` R
 pairs.obj = estimateHeuristic(mcc.rs, exprData.filt, kappa = 1)
 plot(1:100, pairs.obj[1:100]) 
-# Choose a value roughly corresponding to the place where the slope gets small
+# Choose a value roughly corresponding to the beginning of the long tail
 mcc.res = runMCC(mcc.rs, exprData.filt, kappa = 1, nNeg = 0.1, nHeuristic = 20)
 ```
+
+#### Additional parameters (not used in the paper)
+
+* `stopNoImprove`(int, default `25`). By default, the solver stops the search when no improvement to the current best solution is found during 25 successive search levels. This can be changed setting the `stopNoImprove` parameter to another value.
+* `maxNbCells`(int, default `Inf`). Alternatively, a fixed upper limit on the number of cells can be defined by setting `maxNbCells`. The search is stopped once this level is reached.
+* `minCoExpGenes`(int, default `0`). Adds an extra constraint specifying a minimum number of genes that must be expressed in all cells of the cluster to form a valid solution. By default, this constraint is not present.
+* `verbose`(boolean, default `TRUE`). Printing information during execution can be disabled by setting the argument `verbose = FALSE`.
 
 #### Top-$k$ search
 
