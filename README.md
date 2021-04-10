@@ -1,6 +1,6 @@
 # MicroCellClust
 
-This repository contains an implementation of the MicroCellClust optimisation problem presented in [...]. It is designed to search for rare cell-clusters (typically less than 10% of the number of cells) that present a highly specific gene expression in scRNA-seq data. It has been implemented in the Scala programming language. This repository also contains an interface to run MicroCellClust in R.
+This repository contains an implementation of the MicroCellClust optimisation problem presented in Bioinformatics, btab239. It is designed to search for rare cell-clusters (typically less than 10% of the number of cells) that present a highly specific gene expression in scRNA-seq data. It has been implemented in the Scala programming language. This repository also contains an interface to run MicroCellClust in R.
 
 Version 1.2 is also available on Zenodo http://doi.org/10.5281/zenodo.4580332
 
