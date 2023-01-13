@@ -128,7 +128,7 @@ object LocalSearch {
     }
 
     /**
-      * Sarcastically generates a new neighbour
+      * Stochastically generates a new neighbour
       * @param m an expression matrix with samples (cells) on the rows and markers (genes) on the columns
       * @param curOrdered the samples currently selected, ordered decreasingly by sum of expression over initial markers
       * @param oocOrdered the samples currently not selected, ordered decreasingly by sum of expression over initial markers

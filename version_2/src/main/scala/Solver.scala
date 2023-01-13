@@ -64,13 +64,13 @@ object Solver {
             if (hOrd.length == nSam) { // Use rareness score
                 for (a <- (0 until nSam); b <- ((a + 1) until (nSam min (a + nHeurPair)))) {
                     val p = Set(hOrd(a)._2, hOrd(b)._2)
-                    val (markers, obj) = getMarkers(m, p.toList, expr, markSum, nNeg, kA)
+                    val (markers, obj) = getMarkers(m, p.toList, expr, markSum, nNeg, kA) //TODO change to sets
                     nBestQueue += ((p, markers, obj))
                     if (nBestQueue.size > nH) nBestQueue.dequeue
                 }
             } else { // Generate all pairs
                 for (p <- (0 until nSam).combinations(2)) {
-                    val (markers, obj) = getMarkers(m, p.toList, expr, markSum, nNeg, kA)
+                    val (markers, obj) = getMarkers(m, p.toList, expr, markSum, nNeg, kA) //TODO change to sets
                     nBestQueue += ((p.toSet, markers, obj))
                     if (nBestQueue.size > nH) nBestQueue.dequeue
                 }
@@ -78,7 +78,7 @@ object Solver {
 
             val t1 = System.currentTimeMillis
 
-            val cBest = nBestQueue.toList.reverse(0)
+            val cBest = nBestQueue.clone.dequeueAll.reverse(0)
 
             if (verbose) {
                 val nb = "    ****"
@@ -111,8 +111,8 @@ object Solver {
             }
         }
 
-        val nBest = nBestQueue.toList.reverse
-        var best = nBest(0)
+        val nBest = nBestQueue.dequeueAll.toList.reverse
+        var best = nBest.head
         var prevLvlNBest = nBest.map(x => x._1)
 
         var lvl = 3
@@ -133,7 +133,7 @@ object Solver {
 
             for (p <- prevLvlNBest.indices) {
                 val prev = prevLvlNBest(p)
-                val prevExpSums = getExpSums(m, prev.toList, nNeg)
+                val prevExpSums = getExpSums(m, prev.toList, nNeg) //TODO change to sets
                 for (i <- samPool if !prev.contains(i)) {
                     val samples = prev + i
                     val l = hist.size
@@ -147,9 +147,9 @@ object Solver {
             }
             val t1 = System.currentTimeMillis
 
-            if (nBestQueue.size > 0) {
-                val nBest = nBestQueue.toList.reverse
-                val cBest = nBest(0)
+            if (nBestQueue.nonEmpty) {
+                val nBest = nBestQueue.clone.dequeueAll.toList.reverse
+                val cBest = nBest.head
 
 
                 val msim = if (nH <= 1) 1
@@ -169,10 +169,10 @@ object Solver {
 
                 if (!cellFilt && msim >= 0.9) {
                     cellFilt = true
-                    val markUnion = nBest.map(_._2).flatten.distinct
+                    val markUnion = nBest.flatMap(_._2).distinct
                     samPool = (0 until nSam).toSet.filter(i => getSupport(i, markUnion, expr) >= 0.3)
                 } else if (cellFilt && lvl % 10 == 0) {
-                    val markUnion = nBest.map(_._2).flatten.distinct
+                    val markUnion = nBest.flatMap(_._2).distinct
                     samPool = (0 until nSam).toSet.filter(i => getSupport(i, markUnion, expr) >= 0.3)
                 }
                 val t3 = System.currentTimeMillis()

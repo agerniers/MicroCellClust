@@ -12,5 +12,5 @@ This repository contains implementations of solvers for the MicroCellClust optim
 
 [1] A. Gerniers, O. Bricard and P. Dupont (2021). MicroCellClust: mining rare and highly specific subpopulations from single-cell expression data. *Bioinformatics*, 37(19), 3220-3227. https://doi.org/10.1093/bioinformatics/btab239
 
-[2] Not yet published (submitted to peer-reviewed conference)
+[2] A. Gerniers, P. Dupont (2022). MicroCellClust 2: a hybrid approach for multivariate rare cell mining in large-scale single-cell data. In *2022 IEEE International Conference on Bioinformatics and Biomedicine (BIBM)*, 148-153.
 
