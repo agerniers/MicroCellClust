@@ -76,7 +76,7 @@ Arguments `kappa` and `nNeg` correspond to the $\kappa \ge 0$ and $\mu \in [0, 1
 
 These values are automatically tuned during the execution of the `runMCC` function. To disable this automatic tuning, set respectively `k.adapt = FALSE` and `n.adapt = FALSE`. To tune these values manually, one could re-run several times the `runMCC` function until obtaining the desired result. However, as it operates in two steps (beam search + local search) [2], one can perform this tuning by only re-running the second step (the local search) using:
 ``` R
-runMCC.quick(mcc.rs, mat.filt, mcc.res$cells.idx, mcc.res$genes.idx, gene.sum = gs)
+runMCC.quick(mcc.rs, mat.filt, mcc.res$info$res1.cells.idx, mcc.res$info$res1.genes.idx, gene.sum = gs) # mcc.res$info$res1.___ contains the result of the first stem (beam search), which will be used as initial solution
 ```
 
 ### Looking for other solutions

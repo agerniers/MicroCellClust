@@ -63,8 +63,6 @@ object Objective {
       * @return a list of markers and corresponding objective value
       */
     def selectCandMarkers(m: Array[Array[Double]], candidateMarks: List[(Int, Int, Double)], nbSam: Int, nNeg: Double): (List[Int], Double) = {
-        val maxNeg = ceil(nbSam * nNeg)
-
         val markers = new ListBuffer[Int]
         var obj = 0.0
         var finished = false

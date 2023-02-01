@@ -21,7 +21,7 @@ object LocalSearch {
       * @return
       */
     def localSearch(m: Array[Array[Double]], initSamples: Set[Int], nNeg: Double = 0.1, kappa: Double = 1, nbIter: Int = 1000,
-                    nbRestart: Int = 10, preMarkSum: Array[Double] = Array(), seed: Int = 0, verbose: Boolean = true): (List[Int], List[Int], Double) = {
+                    nbRestart: Int = 20, preMarkSum: Array[Double] = Array(), seed: Int = 0, verbose: Boolean = true): (List[Int], List[Int], Double) = {
         val expr = buildExprMap(m)
         val markSum = if (preMarkSum.length == m(0).length) preMarkSum else getMarkSum(m)
 
@@ -78,7 +78,7 @@ object LocalSearch {
 
                 val (samples, spNew, snNew, nnNew) = neighbour(m, curOrdered, oocOrdered, sp, sn, nn, rand)
 
-                val candMark = nnNew.zipWithIndex.toList.filter { case (n, j) => n <= ceil(samples.size * nNeg) }
+                val candMark = nnNew.zipWithIndex.toList.filter { case (n, _) => n <= ceil(samples.size * nNeg) }
                         .map { case (n, j) => (j, n, -kappa * markSum(j) + (1 + kappa) * spNew(j) + snNew(j)) }
                         .filter(j => j._3 >= 0).sortBy(j => (j._2, -j._3))
 
@@ -146,15 +146,15 @@ object LocalSearch {
             val idx = floor(oocOrdered.length * pow(rand.nextDouble(), 2)).toInt
             val sam = oocOrdered(idx)
 
-            val spNew = (sp.indices).toArray.map(j => {
+            val spNew = sp.indices.toArray.map(j => {
                 val a = if (m(sam)(j) >= 0) m(sam)(j) else 0.0
                 sp(j) + a
             })
-            val snNew = (sn.indices).toArray.map(j => {
+            val snNew = sn.indices.toArray.map(j => {
                 val a = if (m(sam)(j) < 0) m(sam)(j) else 0.0
                 sn(j) + a
             })
-            val nnNew = (nn.indices).toArray.map(j => {
+            val nnNew = nn.indices.toArray.map(j => {
                 val a = if (m(sam)(j) < 0) 1 else 0
                 nn(j) + a
             })
@@ -165,15 +165,15 @@ object LocalSearch {
             val idx = (curOrdered.length - 1) - floor(curOrdered.length * pow(rand.nextDouble(), 2)).toInt
             val sam = curOrdered(idx)
 
-            val spNew = (sp.indices).toArray.map(j => {
+            val spNew = sp.indices.toArray.map(j => {
                 val a = if (m(sam)(j) >= 0) m(sam)(j) else 0.0
                 sp(j) - a
             })
-            val snNew = (sn.indices).toArray.map(j => {
+            val snNew = sn.indices.toArray.map(j => {
                 val a = if (m(sam)(j) < 0) m(sam)(j) else 0.0
                 sn(j) - a
             })
-            val nnNew = (nn.indices).toArray.map(j => {
+            val nnNew = nn.indices.toArray.map(j => {
                 val a = if (m(sam)(j) < 0) 1 else 0
                 nn(j) - a
             })
@@ -203,7 +203,7 @@ object LocalSearch {
         if (objNew >= obj) {
             return 1.0
         } else {
-            return (exp(-(obj - objNew) / temp)) max 0.01
+            return exp(-(obj - objNew) / temp) max 0.01
         }
     }
 
@@ -245,17 +245,17 @@ object LocalSearch {
             if (oocSam(i)._1 > inclSam(i)._1) {
                 current = current + oocSam(i)._2 - inclSam(i)._2
 
-                sp = (sp.indices).toArray.map(j => {
+                sp = sp.indices.toArray.map(j => {
                     val a = if (m(oocSam(i)._2)(j) >= 0) m(oocSam(i)._2)(j) else 0.0
                     val b = if (m(inclSam(i)._2)(j) >= 0) m(inclSam(i)._2)(j) else 0.0
                     sp(j) + a - b
                 })
-                sn = (sn.indices).toArray.map(j => {
+                sn = sn.indices.toArray.map(j => {
                     val a = if (m(oocSam(i)._2)(j) < 0) m(oocSam(i)._2)(j) else 0.0
                     val b = if (m(inclSam(i)._2)(j) < 0) m(inclSam(i)._2)(j) else 0.0
                     sn(j) + a - b
                 })
-                nn = (nn.indices).toArray.map(j => {
+                nn = nn.indices.toArray.map(j => {
                     val a = if (m(oocSam(i)._2)(j) < 0) 1 else 0
                     val b = if (m(inclSam(i)._2)(j) < 0) 1 else 0
                     nn(j) + a - b
@@ -263,21 +263,21 @@ object LocalSearch {
             } else {
                 current = current + oocSam(i)._2
 
-                sp = (sp.indices).toArray.map(j => {
+                sp = sp.indices.toArray.map(j => {
                     val a = if (m(oocSam(i)._2)(j) >= 0) m(oocSam(i)._2)(j) else 0.0
                     sp(j) + a
                 })
-                sn = (sn.indices).toArray.map(j => {
+                sn = sn.indices.toArray.map(j => {
                     val a = if (m(oocSam(i)._2)(j) < 0) m(oocSam(i)._2)(j) else 0.0
                     sn(j) + a
                 })
-                nn = (nn.indices).toArray.map(j => {
+                nn = nn.indices.toArray.map(j => {
                     val a = if (m(oocSam(i)._2)(j) < 0) 1 else 0
                     nn(j) + a
                 })
             }
 
-            val candMark = nn.zipWithIndex.toList.filter { case (n, j) => n <= ceil(current.size * nNeg) }
+            val candMark = nn.zipWithIndex.toList.filter { case (n, _) => n <= ceil(current.size * nNeg) }
                     .map { case (n, j) => (j, n, -kappa * markSum(j) + (1 + kappa) * sp(j) + sn(j)) }
                     .filter(j => j._3 >= 0).sortBy(j => (j._2, -j._3))
 

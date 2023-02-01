@@ -122,7 +122,7 @@ runMCC.bfs = function(mcc.rs, data.matrix, gene.sum, rareness.score = c(), nNeg 
 #'
 #' @return The cells and genes forming the bicluster, and its objective value
 #'
-runMCC.local = function(mcc.rs, data.matrix, init.sol, gene.sum, kappa = 1.0, nNeg = 0.1, nb.iter = 1000, nb.restart = 10, seed = 0, verbose = TRUE) {
+runMCC.local = function(mcc.rs, data.matrix, init.sol, gene.sum, kappa = 1.0, nNeg = 0.1, nb.iter = 1000, nb.restart = 20, seed = 0, verbose = TRUE) {
 
     res = mcc.rs(m = data.matrix, is = init.sol, gs = gene.sum,  k = kappa, n = nNeg, ni = nb.iter, nr = nb.restart, s = seed, v = verbose) *
     'LocalSearch.localSearch(m, initSamples = is.map(_ - 1).toSet, preMarkSum = gs.toArray, kappa = k, nNeg = n, nbIter = ni.toInt, nbRestart = nr.toInt, seed = s.toInt, verbose = v)'
@@ -223,7 +223,7 @@ runMCC = function(mcc.rs, data, gene.sum = c(), rareness.score = c(), data.tfo =
         cells.expr = rowSums(data[, genes.idx.1st[res.1st$genes.idx]] > 0)
     }
     expr.thresh = max(0.4 * length(res.1st$genes.idx), min(0.5 * length(res.1st$genes.idx), min(cells.expr[cells.idx.1st[res.1st$cells.idx]])))
-    #expr.thresh = 0.8 * min(cells.expr[cells.idx.1st[res.1st$cells.idx]]) #TODO
+    # expr.thresh = 0.8 * min(cells.expr[cells.idx.1st[res.1st$cells.idx]])
     if (verbose) {
         message(sprintf("Selecting cells expressing %d percent of provided genes", round((expr.thresh / length(res.1st$genes.idx)) * 100)))
     }
@@ -333,4 +333,3 @@ runMCC.quick = function(mcc.rs, data, init.cells, init.genes, gene.sum = c(), da
     names(res.lst) = c("cells.idx", "cells.names", "genes.idx", "genes.names", "obj.value")
     res.lst
 }
-

@@ -1,6 +1,6 @@
 import Objective._
 
-import scala.collection.mutable.{PriorityQueue, Set => MutSet}
+import scala.collection.mutable.{PriorityQueue => MutPriorityQueue, Set => MutSet}
 
 /*
  * Author: Alexander Gerniers (UCLouvain)
@@ -52,7 +52,7 @@ object Solver {
         }
 
         // Evaluation of pairs of samples
-        val nBestQueue = PriorityQueue[(Set[Int], List[Int], Double)]()(Ordering[Double].on(x => -x._3))
+        val nBestQueue = MutPriorityQueue[(Set[Int], List[Int], Double)]()(Ordering[Double].on(x => -x._3))
 
         while (!check) {
             if (verbose) {
@@ -62,15 +62,15 @@ object Solver {
             val t0 = System.currentTimeMillis
 
             if (hOrd.length == nSam) { // Use rareness score
-                for (a <- (0 until nSam); b <- ((a + 1) until (nSam min (a + nHeurPair)))) {
+                for (a <- 0 until nSam; b <- (a + 1) until (nSam min (a + nHeurPair))) {
                     val p = Set(hOrd(a)._2, hOrd(b)._2)
-                    val (markers, obj) = getMarkers(m, p.toList, expr, markSum, nNeg, kA) //TODO change to sets
+                    val (markers, obj) = getMarkers(m, p.toList, expr, markSum, nNeg, kA)
                     nBestQueue += ((p, markers, obj))
                     if (nBestQueue.size > nH) nBestQueue.dequeue
                 }
             } else { // Generate all pairs
                 for (p <- (0 until nSam).combinations(2)) {
-                    val (markers, obj) = getMarkers(m, p.toList, expr, markSum, nNeg, kA) //TODO change to sets
+                    val (markers, obj) = getMarkers(m, p.toList, expr, markSum, nNeg, kA)
                     nBestQueue += ((p.toSet, markers, obj))
                     if (nBestQueue.size > nH) nBestQueue.dequeue
                 }
@@ -127,13 +127,12 @@ object Solver {
                 print(f"| $lvl%-6s | $kA%-8s | $nH%-12s | $p%-12s |")
             }
             val t0 = System.currentTimeMillis
-            val nBestQueue = PriorityQueue[(Set[Int], List[Int], Double)]()(Ordering[Double].on(x => -x._3))
+            val nBestQueue = MutPriorityQueue[(Set[Int], List[Int], Double)]()(Ordering[Double].on(x => -x._3))
 
             val hist = MutSet[Set[Int]]()
 
-            for (p <- prevLvlNBest.indices) {
-                val prev = prevLvlNBest(p)
-                val prevExpSums = getExpSums(m, prev.toList, nNeg) //TODO change to sets
+            for (prev <- prevLvlNBest) {
+                val prevExpSums = getExpSums(m, prev.toList, nNeg)
                 for (i <- samPool if !prev.contains(i)) {
                     val samples = prev + i
                     val l = hist.size
@@ -153,7 +152,7 @@ object Solver {
 
 
                 val msim = if (nH <= 1) 1
-                else (nBest.drop(1).map(x => ((x._2 intersect cBest._2).size.toDouble / cBest._2.size)).sum / (nBest.length - 1))
+                else nBest.drop(1).map(x => (x._2 intersect cBest._2).size.toDouble / cBest._2.size).sum / (nBest.length - 1)
 
                 // If similarity of markers between solution is high: decrease nHeurKeep
                 if (nhAdapt) {
