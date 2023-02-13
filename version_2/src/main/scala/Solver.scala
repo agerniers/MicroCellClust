@@ -189,7 +189,7 @@ object Solver {
                     }
 
                     if (kAdapt) {
-                        if (cBest._2.length <= 200) {
+                        if (cBest._2.length <= 200 && kA <= 1000) {
                             if (kA < kappa) { // If kappa was temporarily decreased, check if we can go back to normal
                                 val ng = getMarkers(m, cBest._1.toList, expr, markSum, nNeg, kappa)._1.length
 
