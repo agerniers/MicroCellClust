@@ -36,12 +36,14 @@ initMccRscala = function() {
 #' @return A vector with values for each gene
 #'
 geneSum = function(data, data.tfo = "log10", cellsOnCol = TRUE) {
-    if (data.tfo == "log10") {
-        data.tfo = function (x) { log10(x + 0.1) }
-    } else if (data.tfo == "log2") {
-        data.tfo = function (x) { log2(x + 0.5) }
-    } else if (data.tfo == "none") {
-        data.tfo = function (x) { x }
+    if (typeof(data.tfo) == "character") {
+        if (data.tfo == "log10") {
+            data.tfo = function (x) { log10(x + 0.1) }
+        } else if (data.tfo == "log2") {
+            data.tfo = function (x) { log2(x + 0.5) }
+        } else if (data.tfo == "none") {
+            data.tfo = function (x) { x }
+        }
     }
     count_cpe = function (x) {
         lx = data.tfo(x)
@@ -68,7 +70,7 @@ geneSum = function(data, data.tfo = "log10", cellsOnCol = TRUE) {
 }
 
 
-#' Function calling the Scala code for the breadth-first solver
+#' Function calling the Scala code for the beam search
 #'
 #' @param mcc.rs A MicroCellClust RScala instance
 #' @param data.matrix A CELLS x GENES expression matrix (with positive and negative values)
@@ -86,7 +88,7 @@ geneSum = function(data, data.tfo = "log10", cellsOnCol = TRUE) {
 #'
 #' @return The cells and genes forming the bicluster, its objective value, and the final value of kappa
 #'
-runMCC.bfs = function(mcc.rs, data.matrix, gene.sum, rareness.score = c(), nNeg = 0.1, kappa = 1.0, k.adapt = TRUE, n.heur.pair = 100, n.heur.keep = 100, nh.adapt = TRUE, max.nb.cells = Inf, stop.no.improve = 25, verbose = TRUE) {
+runMCC.beam = function(mcc.rs, data.matrix, gene.sum, rareness.score = c(), nNeg = 0.1, kappa = 1.0, k.adapt = TRUE, n.heur.pair = 100, n.heur.keep = 100, nh.adapt = TRUE, max.nb.cells = Inf, stop.no.improve = 25, verbose = TRUE) {
 
     if (length(rareness.score) == nrow(data.matrix)) {
         res = mcc.rs(m = data.matrix, gs = gene.sum, rs = rareness.score, n = nNeg, k = kappa, ka = k.adapt, nhp = n.heur.pair, nhk = n.heur.keep, nha = nh.adapt, mc = max.nb.cells, sni = stop.no.improve, v = verbose) *
@@ -111,7 +113,7 @@ runMCC.bfs = function(mcc.rs, data.matrix, gene.sum, rareness.score = c(), nNeg 
 #'
 #' @param mcc.rs A MicroCellClust RScala instance
 #' @param data.matrix A CELLS x GENES expression matrix (with positive and negative values)
-#' @param init.sol A solution from which to start the local search (typically the result of \code{runMCC.bfs})
+#' @param init.sol A solution from which to start the local search (typically the result of \code{runMCC.beam})
 #' @param gene.sum The sum of positive expression in \code{data.matrix} for each gene (computed if not given)
 #' @param nNeg The maximum proportion of negative values allowed inside the cluster (default: 0.1)
 #' @param kappa The out-of-cluster expression penalty constant (default: 1)
@@ -138,13 +140,13 @@ runMCC.local = function(mcc.rs, data.matrix, init.sol, gene.sum, kappa = 1.0, nN
 
 
 #' Run MicroCellClust
-#'
+#' 
 #' @param mcc.rs A MicroCellClust RScala instance
 #' @param data The (normalized) count data (i.e. positive values; will be transformed inside the function according to \code{data.tfo})
 #'             If data already contains positive and negative values, set data.tfo to "none"
 #' @param gene.sum The sum of positive expression in the transformed data for each gene (computed if not given)
 #' @param rareness.score A list of rareness scores for each cell to use as search heuristic for
-#'                       the breadth-first search (optional, but recommended for data with > 1000 cells)
+#'                       the beam search (optional, but recommended for data with > 1000 cells)
 #' @param data.tfo How to transform the data in a matrix with positive and negative values. Either:
 #'                 - "log10", i.e. log10(x + 0.1) (default)
 #'                 - "log2", i.e. log2(x + 0.5)
@@ -155,12 +157,13 @@ runMCC.local = function(mcc.rs, data.matrix, init.sol, gene.sum, kappa = 1.0, nN
 #' @param nNeg The maximum proportion of negative values allowed inside the cluster (default: 0.1)
 #' @param k.adapt Whether to adapt nNeg before local search (default: \code{TRUE})
 #' @param kappa The out-of-cluster expression penalty constant (default: "auto", i.e. computed as 100 / nb. cells)
-#' @param k.adapt Whether to adapt kappa if too many/few markers are selected during breadth-first search (default: \code{TRUE})
-#' @param iqr If nb.cells > 1000 and \code{rareness.score} is given, define the threshold of cell selection based on the rareness
-#'            score (for breadth-first search) as Q3 + \code{iqr} * IQR (default: 1.5)
+#' @param k.adapt Whether to adapt kappa if too many/few markers are selected during beam search (default: \code{TRUE})
+#' @param min.cells.beam The minimum number of cells to use for the beam search (default: 1000)
+#' @param iqr If nb.cells > \code{min.cells.beam} and \code{rareness.score} is given, define the threshold of cell selection based on the rareness
+#'            score (for beam search) as Q3 + \code{iqr} * IQR (default: 1.5)
 #' @param seed A seed for random events during the local search (default: 0, i.e. no seed is set)
 #' @param verbose enable/disable printing (default: \code{TRUE})
-runMCC = function(mcc.rs, data, gene.sum = c(), rareness.score = c(), data.tfo = "log10", cells.excl = c(), genes.excl = c(), nNeg = 0.1, n.adapt = TRUE, kappa = "auto", k.adapt = TRUE, iqr = 1.5, cellsOnCol = TRUE, seed = 0, verbose = TRUE) {
+runMCC = function(mcc.rs, data, gene.sum = c(), rareness.score = c(), data.tfo = "log10", cells.excl = c(), genes.excl = c(), nNeg = 0.1, n.adapt = TRUE, kappa = "auto", k.adapt = TRUE, min.cells.beam = 1000, iqr = 1.5, cellsOnCol = TRUE, seed = 0, verbose = TRUE) {
     if (kappa == "auto"  && cellsOnCol) {
         kappa = round(100 / ncol(data), 3)
     } else if (kappa == "auto" && !cellsOnCol) {
@@ -170,18 +173,29 @@ runMCC = function(mcc.rs, data, gene.sum = c(), rareness.score = c(), data.tfo =
     if (length(gene.sum) != nrow(data) && length(gene.sum) != ncol(data)) {
         gene.sum = geneSum(data, data.tfo, cellsOnCol)
     }
-    if (data.tfo == "log10") {
-        data.tfo = function (x) { log10(x + 0.1) }
-    } else if (data.tfo == "log2") {
-        data.tfo = function (x) { log2(x + 0.5) }
-    } else if (data.tfo == "none") {
-        data.tfo = function (x) { x }
+    
+    apply.tfo = TRUE
+    if (typeof(data.tfo) == "character") {
+        if (data.tfo == "log10") {
+            data.tfo = function (x) { log10(x + 0.1) }
+        } else if (data.tfo == "log2") {
+            data.tfo = function (x) { log2(x + 0.5) }
+        } else if (data.tfo == "none") {
+            data.tfo = function (x) { x }
+            apply.tfo = FALSE
+        }
     }
 
     # cell selection using rareness score
-    if (length(rareness.score) > 1000) {
+    if (length(rareness.score) > min.cells.beam) {
         th = quantile(rareness.score, 0.75) + iqr * IQR(rareness.score)
-        cells.idx.1st = as.vector(setdiff(which(rareness.score >= th), cells.excl))
+        rare.idx = which(rareness.score >= th)
+        if (length(rare.idx) >= min.cells.beam) {
+            cells.idx.1st = as.vector(setdiff(rare.idx, cells.excl))
+        } else {
+            th.min = min(tail(sort(rareness.score), min.cells.beam))
+            cells.idx.1st = as.vector(setdiff(which(rareness.score >= th.min), cells.excl))
+        }
     } else if (cellsOnCol) {
         cells.idx.1st = as.vector(setdiff(1 : ncol(data), cells.excl))
     } else {
@@ -189,7 +203,7 @@ runMCC = function(mcc.rs, data, gene.sum = c(), rareness.score = c(), data.tfo =
     }
 
     # remove genes not expressed in these cells
-    if (data.tfo(42) == 42) { # I.e. data.tfo was "none"
+    if (!apply.tfo) { # I.e. data.tfo was "none"
         if (cellsOnCol) {
             genes.expr = rowSums(data[, cells.idx.1st] >= 0)
         } else {
@@ -209,11 +223,11 @@ runMCC = function(mcc.rs, data, gene.sum = c(), rareness.score = c(), data.tfo =
         message(sprintf("Beginning 1st run with %d cells and %d genes", length(cells.idx.1st), length(genes.idx.1st)))
     }
 
-    # 1st search: breadth-first
+    # 1st search: beam search
     if (cellsOnCol) {
-        res.1st = runMCC.bfs(mcc.rs, data.tfo(as.matrix(t(data[genes.idx.1st, cells.idx.1st]))), gene.sum[genes.idx.1st], rareness.score[cells.idx.1st], nNeg = nNeg, kappa = kappa, k.adapt = k.adapt, verbose = verbose)
+        res.1st = runMCC.beam(mcc.rs, data.tfo(as.matrix(t(data[genes.idx.1st, cells.idx.1st]))), gene.sum[genes.idx.1st], rareness.score[cells.idx.1st], nNeg = nNeg, kappa = kappa, k.adapt = k.adapt, verbose = verbose)
     } else {
-        res.1st = runMCC.bfs(mcc.rs, data.tfo(as.matrix(data[cells.idx.1st, genes.idx.1st])), gene.sum[genes.idx.1st], rareness.score[cells.idx.1st], nNeg = nNeg, kappa = kappa, k.adapt = k.adapt, verbose = verbose)
+        res.1st = runMCC.beam(mcc.rs, data.tfo(as.matrix(data[cells.idx.1st, genes.idx.1st])), gene.sum[genes.idx.1st], rareness.score[cells.idx.1st], nNeg = nNeg, kappa = kappa, k.adapt = k.adapt, verbose = verbose)
     }
 
     # selection of interesting cells for 2nd search
@@ -290,12 +304,15 @@ runMCC.quick = function(mcc.rs, data, init.cells, init.genes, gene.sum = c(), da
     if (length(gene.sum) != nrow(data) && length(gene.sum) != ncol(data)) {
         gene.sum = geneSum(data, data.tfo, cellsOnCol)
     }
-    if (data.tfo == "log10") {
-        data.tfo = function (x) { log10(x + 0.1) }
-    } else if (data.tfo == "log2") {
-        data.tfo = function (x) { log2(x + 0.5) }
-    } else if (data.tfo == "none") {
-        data.tfo = function (x) { x }
+    
+    if (typeof(data.tfo) == "character") {
+        if (data.tfo == "log10") {
+            data.tfo = function (x) { log10(x + 0.1) }
+        } else if (data.tfo == "log2") {
+            data.tfo = function (x) { log2(x + 0.5) }
+        } else if (data.tfo == "none") {
+            data.tfo = function (x) { x }
+        }
     }
 
     # selection of interesting cells

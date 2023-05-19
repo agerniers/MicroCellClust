@@ -36,7 +36,7 @@ This `mcc.rs` object needs to be passed as the first argument to any R function 
 
 MicroCellClust assumes the data is represented in a matrix (or data frame) containing positive values for presence of expression, and negative values in case of absence of (or negligible) expression. Such data can be obtained from (normalize) count data using an appropriate transformation, such as $\log_{10}(x + 0.1)$.
 
-**Note:** Applying such a transformation means the data can no longer be stored in a sparse structure, which can be problematic when dealing with large structures of data. Therefore, all given `R` *will assume the given data are count values (or normalized counts)* and will apply the transformation internally. By default, they apply a $\log_{10}(x + 0.1)$ transformation. This behavior can be changed by setting the `data.tfo` parameter accordingly :
+**Note:** Applying such a transformation means the data can no longer be stored in a sparse structure, which can be problematic when dealing with large structures of data. Therefore, all given `R` functions *will assume by default the given data are count values (or normalized counts)* and will apply the transformation internally. By default, they apply a $\log_{10}(x + 0.1)$ transformation. This behavior can be changed by setting the `data.tfo` parameter accordingly :
 
 * `"log10"` : $\log_{10}(x + 0.1)$ transformation (default)
 * `"log2"` : $\log_{2}(x + 0.5)$ transformation
@@ -76,7 +76,7 @@ Arguments `kappa` and `nNeg` correspond to the $\kappa \ge 0$ and $\mu \in [0, 1
 
 These values are automatically tuned during the execution of the `runMCC` function. To disable this automatic tuning, set respectively `k.adapt = FALSE` and `n.adapt = FALSE`. To tune these values manually, one could re-run several times the `runMCC` function until obtaining the desired result. However, as it operates in two steps (beam search + local search) [2], one can perform this tuning by only re-running the second step (the local search) using:
 ``` R
-runMCC.quick(mcc.rs, mat.filt, mcc.res$info$res1.cells.idx, mcc.res$info$res1.genes.idx, gene.sum = gs) # mcc.res$info$res1.___ contains the result of the first stem (beam search), which will be used as initial solution
+runMCC.quick(mcc.rs, mat.filt, mcc.res$info$res1.cells.idx, mcc.res$info$res1.genes.idx, gene.sum = gs) # mcc.res$info$res1.___ contains the result of the first step (beam search), which will be used as initial solution
 ```
 
 ### Looking for other solutions
@@ -86,3 +86,11 @@ Once a first cell/gene bicluster has been found, one can re-run `runMCC` while e
 mcc.res.2 = runMCC(mcc.rs, mat.filt, gene.sum = gs, rareness.score = rs, cells.excl = mcc.res$cells.idx) # If needed, don't forget to set the `data.tfo` and `cellesOnCol` arguments
 ```
 Alternatively, one could also/instead exclude the genes from the first solution using `genes.excl = mcc.res$genes.idx`.
+
+
+### Other parameters
+
+* By default, `runMCC` uses the FiRE threshold $Q3 + 1.5 \cdot IQR$ on the rareness scores to select the cells for the beam search. An other value than $1.5$ can be specified using the `iqr` parameter. 
+* By default, `runMCC` uses a minimum of 1000 cells (assuming the data is larger than that) for the beam search. This value can be changed using the `min.cells.beam` parameter.
+* One can set the `seed` parameter for the random events in the local search.
+
